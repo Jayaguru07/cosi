@@ -17,7 +17,14 @@ export const SignalControllerPanel: React.FC<SignalControllerPanelProps> = ({ en
   const currentDecision = decisionLog[0];
 
   const handleControllerSwitch = (type: ControllerType) => {
-    engine.setControllerType(type);
+    if (type === 'enhanced') {
+      engine.activateMySystemAndSolve();
+    } else {
+      engine.setControllerType(type);
+      if (!snapshot.isRunning) {
+        engine.start();
+      }
+    }
     onStateChange();
   };
 
@@ -44,27 +51,27 @@ export const SignalControllerPanel: React.FC<SignalControllerPanelProps> = ({ en
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-slate-400">Mode:</span>
-          <div className="flex bg-slate-800 p-0.5 rounded-lg text-xs">
+          <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs">
             <button
               onClick={() => handleControllerSwitch('baseline')}
-              className={`px-3 py-1 rounded-md font-medium transition ${
+              className={`px-3 py-1 rounded-md font-medium transition cursor-pointer flex items-center gap-1.5 ${
                 controllerType === 'baseline'
-                  ? 'bg-amber-500 text-slate-950 shadow-sm font-semibold'
+                  ? 'bg-rose-900/50 text-rose-200 border border-rose-600/50 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Baseline CoSiCoSt
+              <span>Current System</span>
             </button>
             <button
               onClick={() => handleControllerSwitch('enhanced')}
-              className={`px-3 py-1 rounded-md font-medium transition flex items-center gap-1.5 ${
+              className={`px-3 py-1 rounded-md font-medium transition cursor-pointer flex items-center gap-1.5 ${
                 controllerType === 'enhanced'
-                  ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-sm font-semibold'
+                  ? 'bg-emerald-900/50 text-emerald-200 border border-emerald-600/50 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Sparkles className="w-3 h-3 text-cyan-300" />
-              AI-Enhanced
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Our Solution</span>
             </button>
           </div>
         </div>
@@ -113,6 +120,31 @@ export const SignalControllerPanel: React.FC<SignalControllerPanelProps> = ({ en
             </div>
           </div>
         </div>
+
+        {/* System Status Banner */}
+        {controllerType === 'baseline' ? (
+          <div className="p-2.5 rounded-xl bg-slate-950 border border-rose-800/50 text-xs text-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm">
+            <div className="flex items-center gap-2">
+              <AlertOctagon className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>
+                <strong>Conventional Mode Active:</strong> Arterial volume prioritization with starvation vulnerability.
+              </span>
+            </div>
+            <button
+              onClick={() => handleControllerSwitch('enhanced')}
+              className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-semibold text-xs shrink-0 transition active:scale-95 cursor-pointer shadow-sm"
+            >
+              Simulate Solution
+            </button>
+          </div>
+        ) : (
+          <div className="p-2.5 rounded-xl bg-slate-950 border border-emerald-800/50 text-xs text-emerald-200 flex items-center gap-2 shadow-sm">
+            <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>
+              <strong>Adaptive Solution Active:</strong> 30s Anti-starvation ceiling enforced with 5.0x PCU bus priority.
+            </span>
+          </div>
+        )}
 
         {/* Live Controller Decision Breakdown */}
         {currentDecision && (

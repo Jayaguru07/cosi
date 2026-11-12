@@ -1,6 +1,8 @@
 import { Approach, ComparisonMetrics } from '@/types/traffic';
-import { TrafficSimulationEngine } from './engine';
+import { TrafficSimulationEngine, calculateJainsFairnessIndex } from './engine';
 import { PRESET_SCENARIOS } from './presets';
+
+export { calculateJainsFairnessIndex };
 
 export interface ComparisonRunOptions {
   presetId: string;
@@ -39,26 +41,7 @@ export interface ComparisonRunResult {
   diff: ComparisonMetrics['diff'];
 }
 
-/**
- * Calculates Jain's Fairness Index for equitable service across the 4 approaches
- * J = (sum(x_i))^2 / (n * sum(x_i^2))
- * Higher is more equitable (1.0 = perfectly fair).
- */
-export function calculateJainsFairnessIndex(values: number[]): number {
-  if (values.length === 0) return 1.0;
-  // If all values are 0, fairness is 1.0
-  const allZero = values.every((v) => v === 0);
-  if (allZero) return 1.0;
 
-  const n = values.length;
-  // Transform wait times: inverse wait time or service satisfaction
-  const sum = values.reduce((acc, v) => acc + (v > 0 ? 1 / (v + 1) : 1), 0);
-  const sumSq = values.reduce((acc, v) => acc + Math.pow(v > 0 ? 1 / (v + 1) : 1, 2), 0);
-
-  if (sumSq === 0) return 1.0;
-  const index = Math.pow(sum, 2) / (n * sumSq);
-  return Number(Math.min(1.0, Math.max(0.0, index)).toFixed(3));
-}
 
 /**
  * Executes a deterministic headless benchmark running Baseline and Enhanced controllers

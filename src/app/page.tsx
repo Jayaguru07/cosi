@@ -12,6 +12,7 @@ import { DemonstrationMode } from '@/components/DemonstrationMode';
 import { ArchitectureDocTab } from '@/components/ArchitectureDocTab';
 import { BaselineProblemsCard } from '@/components/BaselineProblemsCard';
 import { ProblemsAndSolutionsView } from '@/components/ProblemsAndSolutionsView';
+import { SystemLimitationHUD } from '@/components/SystemLimitationHUD';
 import { ExportModal } from '@/components/ExportModal';
 import {
   Play,
@@ -46,14 +47,15 @@ export default function HomePage() {
 
   const [isExportOpen, setIsExportOpen] = useState(false);
 
-  // Simulation Clock Tick Loop
+  // Smooth Simulation Clock Tick Loop
   useEffect(() => {
     let lastWallTime = performance.now();
     let accumulatedSimTime = 0;
+    let lastUiUpdateTime = 0;
     let animId: number;
 
     const loop = (currentWallTime: number) => {
-      const dtReal = (currentWallTime - lastWallTime) / 1000;
+      const dtReal = Math.min((currentWallTime - lastWallTime) / 1000, 0.1);
       lastWallTime = currentWallTime;
 
       const state = engine.getSnapshot();
@@ -63,11 +65,19 @@ export default function HomePage() {
         const targetSimDt = dtReal * state.speedMultiplier;
         accumulatedSimTime += targetSimDt;
 
-        // Step in fixed 0.5s or 1.0s chunks for numerical determinism
-        const stepSize = 0.5;
+        // Smooth physics step: 0.033s (~30 Hz) for fluid continuous car movement
+        const stepSize = 0.033;
+        let didTick = false;
         while (accumulatedSimTime >= stepSize) {
           engine.tick(stepSize);
           accumulatedSimTime -= stepSize;
+          didTick = true;
+        }
+
+        // Throttle React state re-renders to ~12 FPS so UI counters update smoothly
+        // without choking the browser or dropping button click events
+        if (didTick && currentWallTime - lastUiUpdateTime > 80) {
+          lastUiUpdateTime = currentWallTime;
           forceUpdate();
         }
       }
@@ -112,6 +122,18 @@ export default function HomePage() {
     forceUpdate();
   };
 
+  const handleSimulateCurrentSystem = () => {
+    engine.applyPreset('unequal');
+    engine.setControllerType('baseline');
+    engine.start();
+    forceUpdate();
+  };
+
+  const handleSimulateOurSolution = () => {
+    engine.activateMySystemAndSolve();
+    forceUpdate();
+  };
+
   // Format seconds into MM:SS
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -122,74 +144,88 @@ export default function HomePage() {
   const presets = Object.values(PRESET_SCENARIOS);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 font-sans">
+    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
       {/* TOP COMMAND CENTER HEADER */}
-      <header className="sticky top-0 z-40 bg-slate-900/90 border-b border-slate-800 backdrop-blur-md px-6 py-3.5 shadow-xl">
+      <header className="sticky top-0 z-40 bg-slate-900/95 border-b border-slate-800/90 backdrop-blur-md px-6 py-3 shadow-md">
         <div className="max-w-7xl mx-auto flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          {/* Project Title and Badges */}
+          {/* Project Title and Context */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 text-slate-950 font-black text-lg">
-              C
+            <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700/80 flex items-center justify-center text-emerald-400 font-bold text-sm shadow-inner">
+              <Activity className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold text-slate-100 tracking-wide">
-                  AI-Enhanced CoSiCoSt
+                <h1 className="text-sm font-bold text-slate-100 tracking-tight">
+                  CoSiCoSt Traffic Studio
                 </h1>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-semibold">
-                  Adaptive Traffic Control
-                </span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800/60 font-semibold">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-medium">
                   Indian Mixed Traffic
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-medium">
+                  Autonomous Simulation
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Reverse Engineering Study & AI-Driven Passenger Priority Simulation (C-DAC Inspired)
+                Comparative Study: Conventional Volume Actuation vs AI-Enhanced Passenger Priority
               </p>
             </div>
           </div>
 
-          {/* Quick Simulation Stats & Actions */}
+          {/* Quick Simulation Stats & Mode Switcher */}
           <div className="flex flex-wrap items-center gap-3 text-xs">
             {/* Clock */}
             <div className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-2 font-mono">
-              <span className="text-slate-400">TIME:</span>
-              <span className="font-bold text-cyan-400 text-sm">{formatTime(state.time)}</span>
+              <span className="text-slate-500">TIME:</span>
+              <span className="font-semibold text-slate-200 text-sm">{formatTime(state.time)}</span>
             </div>
 
             {/* Status indicator */}
             <div className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-2">
               <span
                 className={`w-2 h-2 rounded-full ${
-                  state.isRunning ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'
+                  state.isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
                 }`}
               />
-              <span className="font-mono uppercase font-semibold text-slate-300">
+              <span className="font-mono uppercase font-semibold text-slate-300 text-[11px]">
                 {state.isRunning ? 'Running' : 'Paused'}
               </span>
             </div>
 
-            {/* Active Controller Badge */}
-            <div
-              className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 font-semibold ${
-                state.controllerType === 'enhanced'
-                  ? 'bg-violet-950/50 border-violet-500/40 text-violet-300'
-                  : 'bg-amber-950/50 border-amber-500/40 text-amber-300'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
-              <span>
-                {state.controllerType === 'enhanced' ? 'AI-Enhanced' : 'Baseline CoSiCoSt'}
-              </span>
+            {/* Master Controller Mode Switcher */}
+            <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 shadow-inner">
+              <button
+                onClick={handleSimulateCurrentSystem}
+                title="Simulate Conventional CoSiCoSt controller (Shows Limitations)"
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                  state.controllerType === 'baseline'
+                    ? 'bg-rose-900/50 text-rose-200 border border-rose-500/50 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                <span>Current System</span>
+              </button>
+              <button
+                onClick={handleSimulateOurSolution}
+                title="Simulate Our Solution (Solves All Limitations)"
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                  state.controllerType === 'enhanced'
+                    ? 'bg-emerald-900/50 text-emerald-200 border border-emerald-500/50 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Our Solution</span>
+              </button>
             </div>
 
             {/* Export Report Button */}
             <button
               onClick={() => setIsExportOpen(true)}
-              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold flex items-center gap-1.5 transition active:scale-95"
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
             >
-              <Download className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Export Report</span>
+              <Download className="w-3.5 h-3.5 text-slate-400" />
+              <span>Export</span>
             </button>
           </div>
         </div>
@@ -202,10 +238,10 @@ export default function HomePage() {
           <div className="flex items-center gap-2">
             <button
               onClick={handleStartPause}
-              className={`px-4 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md transition active:scale-95 ${
+              className={`px-4 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition active:scale-95 cursor-pointer ${
                 state.isRunning
-                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950'
-                  : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-sm'
+                  : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-sm'
               }`}
             >
               {state.isRunning ? (
@@ -222,14 +258,14 @@ export default function HomePage() {
             <button
               onClick={handleStepForward}
               title="Step forward 1 simulation second"
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium text-xs flex items-center gap-1 transition active:scale-95"
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium text-xs flex items-center gap-1 transition active:scale-95 cursor-pointer"
             >
               <StepForward className="w-3.5 h-3.5" /> +1s Step
             </button>
 
             <button
               onClick={handleReset}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-red-950/60 text-slate-300 hover:text-red-300 border border-slate-700 hover:border-red-500/50 font-medium text-xs flex items-center gap-1 transition active:scale-95"
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium text-xs flex items-center gap-1 transition active:scale-95 cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" /> Reset
             </button>
@@ -241,9 +277,9 @@ export default function HomePage() {
                 <button
                   key={s}
                   onClick={() => handleSpeedChange(s)}
-                  className={`px-2 py-0.5 rounded font-mono font-bold transition ${
+                  className={`px-2 py-0.5 rounded font-mono font-semibold transition cursor-pointer ${
                     state.speedMultiplier === s
-                      ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                      ? 'bg-slate-200 text-slate-950 shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -257,21 +293,20 @@ export default function HomePage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setActiveTab('problems')}
-              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition active:scale-95 shadow-md shadow-amber-500/10"
+              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-medium text-xs flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
             >
               <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-              <span>CoSiCoSt Flaws vs AI Fixes</span>
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping ml-0.5" />
+              <span>Full Flaws & Solutions Matrix</span>
             </button>
 
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400 font-medium flex items-center gap-1">
-                <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" /> Preset:
+                <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" /> Preset:
               </span>
               <select
                 value={state.activePresetId}
                 onChange={(e) => handlePresetSelect(e.target.value)}
-                className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-cyan-500 cursor-pointer"
+                className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-medium focus:outline-none focus:border-slate-500 cursor-pointer"
               >
                 {presets.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -302,9 +337,9 @@ export default function HomePage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                className={`px-4 py-2 rounded-xl font-semibold flex items-center gap-2 transition whitespace-nowrap ${
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 transition whitespace-nowrap cursor-pointer ${
                   isActive
-                    ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/10'
+                    ? 'bg-slate-800 text-slate-100 border border-slate-700 shadow-sm font-semibold'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
                 }`}
               >
@@ -321,6 +356,9 @@ export default function HomePage() {
         {/* TAB 1: LIVE SIMULATION & CONTROLS */}
         {activeTab === 'simulation' && (
           <div className="space-y-6">
+            {/* Real-time Limitations vs AI Solutions HUD */}
+            <SystemLimitationHUD engine={engine} onStateChange={forceUpdate} />
+
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Left Column: Canvas (7 cols) */}
               <div className="lg:col-span-7 space-y-6">
@@ -340,7 +378,7 @@ export default function HomePage() {
 
             {/* Baseline CoSiCoSt Problems & Vulnerabilities Card */}
             <div>
-              <BaselineProblemsCard engine={engine} />
+              <BaselineProblemsCard engine={engine} onStateChange={forceUpdate} />
             </div>
           </div>
         )}

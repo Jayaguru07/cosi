@@ -15,43 +15,54 @@ import {
 
 interface BaselineProblemsCardProps {
   engine: TrafficSimulationEngine;
+  onStateChange?: () => void;
 }
 
-export const BaselineProblemsCard: React.FC<BaselineProblemsCardProps> = ({ engine }) => {
+export const BaselineProblemsCard: React.FC<BaselineProblemsCardProps> = ({ engine, onStateChange }) => {
   const snapshot = engine.getSnapshot();
   const summary = engine.getSummaryMetrics();
   const isBaseline = snapshot.controllerType === 'baseline';
 
   const isStarving = summary.maxWaitTime >= snapshot.controllerConfig.maxWaitThreshold;
 
+  const handleTriggerBaseline = () => {
+    engine.activateCurrentSystemFlaws('unequal');
+    onStateChange?.();
+  };
+
+  const handleActivateMySystem = () => {
+    engine.activateMySystemAndSolve();
+    onStateChange?.();
+  };
+
   return (
-    <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-b from-slate-900 to-slate-950 p-6 shadow-2xl backdrop-blur-md">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-6 shadow-xl backdrop-blur-md">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between pb-5 border-b border-slate-800 gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
-            <AlertTriangle className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300">
+            <AlertTriangle className="w-4 h-4 text-amber-400" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wide flex items-center gap-2">
-              Why Traditional CoSiCoSt Struggles in Indian Mixed Traffic
+            <h3 className="text-sm font-semibold text-slate-100 tracking-wide flex items-center gap-2">
+              Why Traditional CoSiCoSt Struggles in Mixed Traffic
             </h3>
             <p className="text-xs text-slate-400">
-              Analysis of limitations in raw-demand adaptive control vs our AI-Enhanced solutions.
+              Analysis of limitations in raw-demand adaptive control vs our passenger-priority solution.
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">Current Mode:</span>
+          <span className="text-xs text-slate-400">Active Mode:</span>
           <span
-            className={`text-xs px-2.5 py-1 rounded-lg font-mono font-bold uppercase ${
+            className={`text-xs px-2.5 py-1 rounded-lg font-mono font-medium ${
               isBaseline
-                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-                : 'bg-violet-500/20 text-violet-300 border border-violet-500/40'
+                ? 'bg-rose-950/60 text-rose-300 border border-rose-800/60'
+                : 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
             }`}
           >
-            {isBaseline ? 'Baseline Active (Exhibiting Vulnerabilities)' : 'AI-Enhanced Active (Protected)'}
+            {isBaseline ? 'Conventional Baseline' : 'Adaptive Solution Active'}
           </span>
         </div>
       </div>
@@ -186,22 +197,40 @@ export const BaselineProblemsCard: React.FC<BaselineProblemsCardProps> = ({ engi
         </div>
       </div>
 
-      {/* Live Interactive CTA */}
+      {/* Live Interactive Actions */}
       <div className="mt-5 p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-        <div className="text-slate-300">
-          Want to demonstrate these exact vulnerabilities to your professor?
+        <div className="text-slate-400">
+          {isBaseline
+            ? 'Conventional baseline limitations are active in current playback.'
+            : 'Our solution is actively running with 30s anti-starvation ceiling and PCU weighting.'}
         </div>
-        <button
-          onClick={() => {
-            engine.setControllerType('baseline');
-            engine.applyPreset('unequal');
-            engine.start();
-          }}
-          className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold flex items-center gap-2 transition active:scale-95 shadow-lg shadow-amber-500/20"
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          Trigger Baseline Starvation Demo (Preset D)
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {isBaseline ? (
+            <>
+              <button
+                onClick={handleTriggerBaseline}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+              >
+                <span>Stage Flaw Scenario (Preset D)</span>
+              </button>
+              <button
+                onClick={handleActivateMySystem}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-semibold flex items-center gap-2 transition active:scale-95 cursor-pointer shadow-sm"
+              >
+                <Sparkles className="w-3.5 h-3.5 fill-slate-950" />
+                <span>Simulate Our Solution</span>
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleTriggerBaseline}
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-800/60 font-medium flex items-center gap-2 transition active:scale-95 cursor-pointer"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+              <span>Simulate Current System Flaws</span>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

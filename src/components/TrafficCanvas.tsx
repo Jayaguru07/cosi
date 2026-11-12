@@ -34,6 +34,7 @@ export const TrafficCanvas: React.FC<TrafficCanvasProps> = ({ engine }) => {
 
       const state = engine.getSnapshot();
       const { signalState, vehicles } = state;
+      const isBaseline = state.controllerType === 'baseline';
 
       // Clear Canvas (Surrounding terrain / cityscape)
       ctx.fillStyle = '#0f172a'; // dark navy background
@@ -518,22 +519,68 @@ export const TrafficCanvas: React.FC<TrafficCanvasProps> = ({ engine }) => {
 
         // Waiting time indicator ring and Starvation Warning
         const isStarving = v.waitingTime >= state.controllerConfig.maxWaitThreshold;
-        if (isStarving) {
-          // Pulsing Red Starvation Halo
-          ctx.strokeStyle = '#ef4444';
-          ctx.lineWidth = 2.5;
-          ctx.shadowColor = '#ef4444';
-          ctx.shadowBlur = 10;
-          ctx.beginPath();
-          ctx.arc(0, 0, Math.max(vLenPx, vWidthPx) / 2 + 5, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.shadowBlur = 0;
 
-          // Starvation text tag
-          ctx.fillStyle = '#fca5a5';
-          ctx.font = 'bold 8px Inter, sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText(`STARVING ${v.waitingTime.toFixed(0)}s`, 0, -vLenPx / 2 - 6);
+        // Bus capacity awareness tag
+        if (v.type === 'bus' && v.isQueued) {
+          ctx.save();
+          if (isBaseline) {
+            // Baseline flaw: Bus treated as solo scooter
+            ctx.fillStyle = '#fca5a5';
+            ctx.font = 'bold 8px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('1x Wt (50 Pax Ignored)', 0, vLenPx / 2 + 8);
+          } else {
+            // Enhanced fix: Bus given 5x PCU priority
+            ctx.strokeStyle = '#06b6d4';
+            ctx.lineWidth = 1.5;
+            ctx.shadowColor = '#06b6d4';
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.arc(0, 0, Math.max(vLenPx, vWidthPx) / 2 + 3, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            ctx.fillStyle = '#67e8f9';
+            ctx.font = 'bold 8px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('✨ 5x PCU (50 Pax Priority)', 0, vLenPx / 2 + 8);
+          }
+          ctx.restore();
+        }
+
+        if (isStarving) {
+          if (isBaseline) {
+            // Pulsing Red Starvation Halo in Baseline
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 2.5;
+            ctx.shadowColor = '#ef4444';
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.arc(0, 0, Math.max(vLenPx, vWidthPx) / 2 + 5, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Starvation text tag
+            ctx.fillStyle = '#fca5a5';
+            ctx.font = 'bold 8px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(`🚨 STARVED ${v.waitingTime.toFixed(0)}s (Flaw)`, 0, -vLenPx / 2 - 6);
+          } else {
+            // Rescuing halo in My System
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 2.5;
+            ctx.shadowColor = '#10b981';
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.arc(0, 0, Math.max(vLenPx, vWidthPx) / 2 + 5, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            ctx.fillStyle = '#6ee7b7';
+            ctx.font = 'bold 8px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(`⚡ RESCUING ${v.waitingTime.toFixed(0)}s`, 0, -vLenPx / 2 - 6);
+          }
         } else if (v.waitingTime >= state.controllerConfig.maxWaitThreshold * 0.7) {
           // Approaching Starvation (Amber Halo)
           ctx.strokeStyle = '#f59e0b';
@@ -590,7 +637,9 @@ export const TrafficCanvas: React.FC<TrafficCanvasProps> = ({ engine }) => {
         ctx.font = hasStarvation ? 'bold 10px Inter, sans-serif' : '10px Inter, sans-serif';
         ctx.fillText(
           hasStarvation
-            ? `🚨 STARVED (${appMetric.maxWaitTime.toFixed(0)}s)`
+            ? isBaseline
+              ? `🚨 STARVED (${appMetric.maxWaitTime.toFixed(0)}s) [CURRENT FLAW]`
+              : `⚡ RESCUED (${appMetric.maxWaitTime.toFixed(0)}s) [MY SYSTEM FIX]`
             : isGreen
             ? `Flowing | Queue: ${qCount}`
             : `Wait: ${appMetric.maxWaitTime.toFixed(0)}s | Q: ${qCount}`,
@@ -649,6 +698,39 @@ export const TrafficCanvas: React.FC<TrafficCanvasProps> = ({ engine }) => {
       ctx.fillStyle = '#cbd5e1';
       ctx.font = '10px Inter, sans-serif';
       ctx.fillText(`Remaining: ${remainingTime.toFixed(0)}s / ${signalState.targetDuration}s`, centerX, centerY + 11);
+      ctx.restore();
+
+      // Draw Top Ribbon Across Canvas indicating Current System vs My System
+      const isBaselineMode = state.controllerType === 'baseline';
+      ctx.save();
+      ctx.fillStyle = isBaselineMode ? 'rgba(30, 41, 59, 0.94)' : 'rgba(15, 23, 42, 0.94)';
+      ctx.strokeStyle = isBaselineMode ? '#e11d48' : '#059669';
+      ctx.lineWidth = 1;
+      ctx.fillRect(0, 0, width, 24);
+      ctx.beginPath();
+      ctx.moveTo(0, 24);
+      ctx.lineTo(width, 24);
+      ctx.stroke();
+
+      ctx.fillStyle = isBaselineMode ? '#fda4af' : '#a7f3d0';
+      ctx.font = '600 10px Inter, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(
+        isBaselineMode
+          ? 'Conventional CoSiCoSt Mode: Arterial Volume Bias • Cross-Street Starvation Risk'
+          : 'Our Adaptive PCU Solution: Passenger Priority • 30s Anti-Starvation Ceiling Active',
+        14,
+        16
+      );
+
+      ctx.fillStyle = isBaselineMode ? '#f43f5e' : '#10b981';
+      ctx.font = '500 9px Inter, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(
+        isBaselineMode ? 'Mode: Conventional Baseline' : 'Mode: Adaptive Solution',
+        width - 14,
+        16
+      );
       ctx.restore();
 
       animationFrameId = requestAnimationFrame(render);

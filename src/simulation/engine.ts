@@ -40,6 +40,25 @@ export interface SimulationEngineState {
   adjustmentLog: ManualAdjustmentEvent[];
 }
 
+/**
+ * Calculates Jain's Fairness Index for equitable service across the 4 approaches
+ * J = (sum(x_i))^2 / (n * sum(x_i^2))
+ * Higher is more equitable (1.0 = perfectly fair).
+ */
+export function calculateJainsFairnessIndex(values: number[]): number {
+  if (values.length === 0) return 1.0;
+  const allZero = values.every((v) => v === 0);
+  if (allZero) return 1.0;
+
+  const n = values.length;
+  const sum = values.reduce((acc, v) => acc + (v > 0 ? 1 / (v + 1) : 1), 0);
+  const sumSq = values.reduce((acc, v) => acc + Math.pow(v > 0 ? 1 / (v + 1) : 1, 2), 0);
+
+  if (sumSq === 0) return 1.0;
+  const index = Math.pow(sum, 2) / (n * sumSq);
+  return Number(Math.min(1.0, Math.max(0.0, index)).toFixed(3));
+}
+
 export class TrafficSimulationEngine {
   private prng: PRNG;
   private controllers: TrafficControllers;
@@ -54,6 +73,8 @@ export class TrafficSimulationEngine {
   };
 
   private vehicleIdCounter = 1;
+  private lastSampleTime = 0;
+  private lastSnapshotTime = 0;
   private lastGreenTimes: Record<Approach, number> = {
     north: 0,
     south: 0,
@@ -166,7 +187,99 @@ export class TrafficSimulationEngine {
   }
 
   public setControllerType(type: ControllerType): void {
+    const prevType = this.state.controllerType;
     this.state.controllerType = type;
+
+    // Immediate rescue: if switching to 'enhanced' while an approach is suffering starvation
+    // and the active phase is green, immediately trigger yellow clearance to rescue starving vehicles!
+    if (prevType === 'baseline' && type === 'enhanced') {
+      const activePhase = this.state.signalState.activePhase;
+      const opposingPhase = activePhase === 'NS_THROUGH' ? 'EW_THROUGH' : 'NS_THROUGH';
+      const opposingMaxWait =
+        opposingPhase === 'EW_THROUGH'
+          ? Math.max(this.getApproachMetrics('east').maxWaitTime, this.getApproachMetrics('west').maxWaitTime)
+          : Math.max(this.getApproachMetrics('north').maxWaitTime, this.getApproachMetrics('south').maxWaitTime);
+
+      if (opposingMaxWait >= this.state.controllerConfig.maxWaitThreshold && this.state.signalState.machineState === 'GREEN') {
+        this.state.signalState.machineState = 'YELLOW';
+        this.state.signalState.timeInCurrentState = 0;
+        this.state.signalState.targetDuration = this.state.controllerConfig.yellowDuration;
+        this.state.signalState.reason = `⚡ MY SYSTEM INSTANT RESCUE: Anti-Starvation Ceiling Enforced! Opposing approach waited ${opposingMaxWait.toFixed(0)}s. Terminating green to rescue cross-street.`;
+        if (activePhase === 'NS_THROUGH') {
+          this.state.signalState.signals = { north: 'yellow', south: 'yellow', east: 'red', west: 'red' };
+        } else {
+          this.state.signalState.signals = { north: 'red', south: 'red', east: 'yellow', west: 'yellow' };
+        }
+      }
+    }
+  }
+
+  public activateMySystemAndSolve(): void {
+    this.setControllerType('enhanced');
+    if (!this.state.isRunning) {
+      this.start();
+    }
+  }
+
+  public activateCurrentSystemFlaws(presetId: string = 'unequal'): void {
+    this.applyPreset(presetId);
+    this.setControllerType('baseline');
+    if (!this.state.isRunning) {
+      this.start();
+    }
+  }
+
+  public getLiveJainsFairnessIndex(): number {
+    const approaches: Approach[] = ['north', 'south', 'east', 'west'];
+    const waitTimes = approaches.map((app) => this.getApproachMetrics(app).avgWaitTime);
+    return calculateJainsFairnessIndex(waitTimes);
+  }
+
+  public getCommuterMetrics(): {
+    totalQueuedCommuters: number;
+    busCommuters: number;
+    carCommuters: number;
+    bikeCommuters: number;
+    autoCommuters: number;
+    totalServedCommuters: number;
+  } {
+    let busCommuters = 0;
+    let carCommuters = 0;
+    let bikeCommuters = 0;
+    let autoCommuters = 0;
+
+    for (const v of this.state.vehicles) {
+      if (v.isQueued && !v.hasCrossedStopLine) {
+        if (v.type === 'bus') busCommuters += 50;
+        else if (v.type === 'car') carCommuters += 2;
+        else if (v.type === 'motorcycle') bikeCommuters += 1;
+        else if (v.type === 'auto') autoCommuters += 3;
+      }
+    }
+
+    let totalServedCommuters = 0;
+    const allServed = [
+      ...this.servedVehiclesByApproach.north,
+      ...this.servedVehiclesByApproach.south,
+      ...this.servedVehiclesByApproach.east,
+      ...this.servedVehiclesByApproach.west,
+    ];
+    for (const v of allServed) {
+      if (v.type === 'bus') totalServedCommuters += 50;
+      else if (v.type === 'auto') totalServedCommuters += 3;
+      else if (v.type === 'car') totalServedCommuters += 2;
+      else if (v.type === 'motorcycle') totalServedCommuters += 1;
+      else totalServedCommuters += 2;
+    }
+
+    return {
+      totalQueuedCommuters: busCommuters + carCommuters + bikeCommuters + autoCommuters,
+      busCommuters,
+      carCommuters,
+      bikeCommuters,
+      autoCommuters,
+      totalServedCommuters,
+    };
   }
 
   public setSpeed(multiplier: number): void {
@@ -185,6 +298,8 @@ export class TrafficSimulationEngine {
     const s = seed !== undefined ? seed : this.state.seed;
     this.prng.setSeed(s);
     this.vehicleIdCounter = 1;
+    this.lastSampleTime = 0;
+    this.lastSnapshotTime = 0;
     this.arrivalAccumulators = { north: 0, south: 0, east: 0, west: 0 };
     this.lastGreenTimes = { north: 0, south: 0, east: 0, west: 0 };
     this.timesServedPerApproach = { north: 0, south: 0, east: 0, west: 0 };
@@ -367,21 +482,25 @@ export class TrafficSimulationEngine {
     this.updateVehiclePositions(dt);
 
     // 4. Sample metrics every 1 second
-    this.queueSamples = [
-      ...this.queueSamples,
-      {
-        timestamp: this.state.time,
-        counts: {
-          north: this.getQueuedVehicles('north').length,
-          south: this.getQueuedVehicles('south').length,
-          east: this.getQueuedVehicles('east').length,
-          west: this.getQueuedVehicles('west').length,
+    if (this.state.time - this.lastSampleTime >= 1.0) {
+      this.lastSampleTime = this.state.time;
+      this.queueSamples = [
+        ...this.queueSamples,
+        {
+          timestamp: this.state.time,
+          counts: {
+            north: this.getQueuedVehicles('north').length,
+            south: this.getQueuedVehicles('south').length,
+            east: this.getQueuedVehicles('east').length,
+            west: this.getQueuedVehicles('west').length,
+          },
         },
-      },
-    ].slice(-300);
+      ].slice(-300);
+    }
 
     // 5. Record periodic snapshots for time-series charts (every 2 seconds)
-    if (Math.floor(this.state.time) % 2 === 0) {
+    if (this.state.time - this.lastSnapshotTime >= 2.0) {
+      this.lastSnapshotTime = this.state.time;
       this.recordSnapshot();
     }
   }

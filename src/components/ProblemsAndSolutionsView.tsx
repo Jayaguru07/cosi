@@ -155,40 +155,46 @@ export const ProblemsAndSolutionsView: React.FC<ProblemsAndSolutionsViewProps> =
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
       {/* Top Banner */}
-      <div className="p-6 rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-cyan-500/30 shadow-2xl backdrop-blur-md">
+      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950 border border-cyan-800 text-cyan-300 text-xs font-semibold uppercase tracking-wider mb-2">
-              <Sparkles className="w-3.5 h-3.5" />
-              Reverse Engineering Project Core Research
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-300 text-xs font-medium mb-2">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              Empirical Architectural Contrast
             </div>
-            <h2 className="text-xl md:text-2xl font-black text-slate-100 tracking-tight">
-              Traditional CoSiCoSt Vulnerabilities vs. Our AI-Enhanced Solution
+            <h2 className="text-xl font-bold text-slate-100 tracking-tight">
+              Traditional CoSiCoSt Limitations vs Our Solution
             </h2>
-            <p className="text-xs md:text-sm text-slate-400 mt-1 max-w-3xl leading-relaxed">
-              Why traditional adaptive traffic controllers struggle in Indian mixed traffic, and how our enhanced
-              architecture solves vehicle equivalence blindness, cross-street starvation, and delay inequity.
+            <p className="text-xs md:text-sm text-slate-400 mt-1 max-w-2xl leading-relaxed">
+              Why traditional adaptive traffic controllers struggle with Indian mixed traffic heterogeneity, and how our passenger-priority system resolves starvation and delay inequity.
             </p>
           </div>
 
-          <button
-            onClick={() => {
-              // Demonstrate side-by-side
-              engine.applyPreset('unequal');
-              engine.adjustVehicleCount('south', 'set_exact', 35);
-              engine.adjustVehicleCount('north', 'set_exact', 20);
-              engine.adjustVehicleCount('east', 'set_exact', 8);
-              engine.adjustVehicleCount('west', 'set_exact', 4);
-              engine.setControllerType('baseline');
-              engine.start();
-              onStateChange();
-              onNavigateTab('simulation');
-            }}
-            className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95 transition shrink-0"
-          >
-            <Play className="w-4 h-4 fill-slate-950" />
-            <span>Launch Live Starvation Failure Demo</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={() => {
+                engine.activateCurrentSystemFlaws('unequal');
+                onStateChange();
+                onNavigateTab('simulation');
+              }}
+              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-800/60 font-medium text-xs flex items-center gap-2 transition active:scale-95 cursor-pointer shadow-sm"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+              <span>Simulate Current System Flaws</span>
+            </button>
+
+            <button
+              onClick={() => {
+                engine.activateMySystemAndSolve();
+                onStateChange();
+                onNavigateTab('simulation');
+              }}
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-semibold text-xs flex items-center gap-2 shadow-sm transition active:scale-95 cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5 fill-slate-950" />
+              <span>Simulate Our Solution</span>
+            </button>
+          </div>
         </div>
       </div>
 
